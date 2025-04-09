@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Thandal</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f0f4f8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 40px;
+      margin: 0;
+    }
+    h1 {
+      color: #1a73e8;
+      margin-bottom: 20px;
+    }
+    .btn {
+      padding: 12px 25px;
+      font-size: 16px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      margin: 10px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background-color: #218838;
+    }
+    .form-container {
+      background-color: #fff;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      margin-top: 20px;
+      width: 300px;
+    }
+    .form-container input, .form-container label {
+      width: 100%;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+    .form-container input[type="text"],
+    .form-container input[type="number"] {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .form-container .pay-btn {
+      background-color: #1a73e8;
+      margin-top: 10px;
+    }
+    .form-container .pay-btn:hover {
+      background-color: #1558b3;
+    }
+    .back {
+      margin-top: 30px;
+      font-size: 14px;
+      color: #1a73e8;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .loan-records {
+      margin-top: 30px;
+      width: 90%;
+      max-width: 700px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 10px;
+      text-align: center;
+      font-size: 14px;
+    }
+    th {
+      background-color: #1a73e8;
+      color: white;
+    }
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    .user-row {
+      background-color: #dbeafe;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .user-row:hover {
+      background-color: #bfdbfe;
+    }
+    .summary {
+      font-size: 13px;
+      color: #555;
+      margin-top: 4px;
+    }
+    .summary .total { color: #1a73e8; }
+    .summary .paid { color: #28a745; }
+    .summary .unpaid { color: #dc3545; }
+    .summary span { margin-right: 10px; }
+    .action-btn {
+      margin: 2px;
+      font-size: 12px;
+      padding: 4px 6px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .pay { background-color: #28a745; color: white; }
+    .edit { background-color: #ffc107; color: #000; }
+    .delete { background-color: #dc3545; color: white; }
+  </style>
+</head>
+<body>
+  <h1>Thandal Section</h1>
+  <button class="btn" onclick="toggleLoanForm()">New Loan</button>
+  <div class="form-container" id="loanForm" style="display:none;">
+    <h3>Loan Form</h3>
+    <label>Full Name:</label><input type="text" id="userName" placeholder="Enter Lender Name" required />
+    <label>Phone Number:</label><input type="text" id="phoneNumber" placeholder="Enter Lender Phone Number" required />
+    <label>Total Amount:</label><input type="number" id="totalAmount" placeholder="Enter Total Amount" required />
+    <label for="LoanDate">Loan Date:</label>
+    <select name="date" id="dateTime" onchange="document.getElementById('LoanDate').value = this.value === 'date' ? new Date().toLocaleDateString() : new Date().toLocaleString([],{ hour12: true })">
+      <option value="date" selected>Date</option>
+      <option value="datetime">Date & Time</option>
+      <input id="LoanDate"/>
+    </select>
+    <button class="btn pay-btn" onclick="submitLoan()">Apply</button>
+  </div>
+  <div class="loan-records" id="loanRecords">
+    <table id="loanTable">
+      <tbody></tbody>
+    </table>
+  </div>
+  <!-- <div class="back" onclick="window.location.href='dashboard.html'">← Back to Dashboard</div> -->
+
+  <script>
+    let currentPayIndex = null;
+    let currentPayFormRow = null;
+
+    function toggleLoanForm() {
+      const form = document.getElementById('loanForm');
+      form.style.display = form.style.display === 'block' ? 'none' : 'block';
+      const now = new Date();
+      // document.getElementById('LoanDate').value = now.toLocaleDateString();
+      document.getElementById('LoanDate').value = new Date().toLocaleDateString()
+      document.getElementById('userName').value = '';
+      document.getElementById('phoneNumber').value = '';
+      document.getElementById('totalAmount').value = '';
+    }
+
+    function submitLoan() {
+      const name = document.getElementById('userName').value;
+      const phone = document.getElementById('phoneNumber').value;
+      const amount = document.getElementById('totalAmount').value;
+      const date = document.getElementById('LoanDate').value;
+
+      if (!name || !phone || !amount) {
+        alert('Please fill all fields.');
+        return;
+      }
+
+      const loanData = {
+        name,
+        phone,
+        amount: Number(amount),
+        originalAmount: Number(amount),
+        paidAmount: 0,
+        payments: [],
+        date,
+        isPaid: false
+      };
+
+      let loans = JSON.parse(localStorage.getItem('loans')) || [];
+      loans.push(loanData);
+      localStorage.setItem('loans', JSON.stringify(loans));
+      alert('Loan saved successfully!');
+      document.getElementById('loanForm').style.display = 'none';
+      loadLoanTable();
+    }
+
+
+    function loadLoanTable(openKey = null) {
+      const tableBody = document.querySelector('#loanTable tbody');
+      tableBody.innerHTML = '';
+      const loans = JSON.parse(localStorage.getItem('loans')) || [];
+
+      const grouped = {};
+      loans.forEach((loan, i) => {
+        const key = `${loan.name}___${loan.phone}`;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push({ ...loan, _index: i });
+      });
+
+      Object.keys(grouped).sort().forEach(key => {
+        const [name, phone] = key.split('___');
+        const safeKey = key.replace(/\s+/g, '-');
+        let totalPaid = 0, totalUnpaid = 0, totalAmount = 0;
+
+        grouped[key].forEach(loan => {
+          totalAmount += loan.originalAmount || loan.amount + (loan.paidAmount || 0);
+          totalPaid += loan.paidAmount || 0;
+          totalUnpaid += loan.amount;
+        });
+
+        const userRow = document.createElement('tr');
+        userRow.classList.add('user-row');
+        userRow.innerHTML = `
+          <td colspan="4">
+            ${name} <span style="color:#666; font-size:13px;">(${phone})</span>
+            <div class="summary">
+              <span class="total">Total: ₹${totalAmount}</span>
+              <span class="paid">Paid: ₹${totalPaid}</span>
+              <span class="unpaid">Unpaid: ₹${totalUnpaid}</span>
+            </div>
+          </td>`;
+        userRow.onclick = () => {
+          if (currentPayFormRow) {
+            currentPayFormRow.remove();
+          }
+          const allPaymentRows = document.querySelectorAll('[class*="payment-"]');
+          allPaymentRows.forEach(row => row.style.display = 'none');
+          const allDetailRows = document.querySelectorAll('[class*="loan-detail-"]');
+          const userRows = document.querySelectorAll(`.loan-detail-${safeKey}`);
+          const isAlreadyOpen = Array.from(userRows).some(row => row.style.display === 'table-row');
+          allDetailRows.forEach(row => row.style.display = 'none');
+          if (!isAlreadyOpen) {
+            userRows.forEach(row => row.style.display = 'table-row');
+          }
+        };
+        tableBody.appendChild(userRow);
+
+        // Reopen if previously open
+        if (openKey === safeKey) {
+          setTimeout(() => {
+            userRow.click();
+          }, 50);
+        }
+
+        grouped[key].forEach(loan => {
+          const detailRow = document.createElement('tr');
+          detailRow.classList.add(`loan-${safeKey}`, `loan-detail-${safeKey}`);
+          detailRow.style.display = 'none';
+          detailRow.innerHTML = `
+            <td>
+              <div>
+                <strong>${loan.name}</strong><br>
+                <a href="tel:${loan.phone}" style="font-size: 12px; color: #1a73e8; text-decoration: none;">${loan.phone}</a>
+              </div>
+            </td>
+            <td>
+              <div class="summary" style="display: flex; justify-content: space-between; gap: 10px;">
+                <span class="total"><strong>Amount:</strong> ₹${loan.originalAmount || loan.amount + (loan.paidAmount || 0)}</span>
+                <span class="paid"><strong>Paid:</strong> ₹${loan.paidAmount || 0}</span>
+                <span class="unpaid"><strong>Unpaid:</strong> ₹${loan.amount}</span>
+              </div>
+            </td>
+            <td>
+              ${loan.date}<br/>
+              ${loan.payments && loan.payments.length > 0 
+                ? `<div style="font-size:12px; color:#555;">
+                    Last Paid: ₹${loan.payments[loan.payments.length - 1].amount} 
+                    on ${loan.payments[loan.payments.length - 1].date}
+                  </div>` 
+                : `<div style="font-size:12px; color:#999;">No payments</div>`}
+              <button class="action-btn pay" onclick="payLoan(${loan._index}); event.stopPropagation()">Pay</button>
+              <button class="action-btn edit" onclick="editLoan(${loan._index}); event.stopPropagation()">Edit</button>
+              <button class="action-btn delete" onclick="deleteLoan(${loan._index}); event.stopPropagation()">Delete</button>
+            </td>`;
+          detailRow.onclick = () => {
+            if (currentPayFormRow) {
+              currentPayFormRow.remove();
+            }
+            const allPaymentRows = document.querySelectorAll('[class*="payment-"]');
+            const paymentRows = document.querySelectorAll(`.payment-${loan._index}`);
+            const isAlreadyOpen = Array.from(paymentRows).some(row => row.style.display === 'table-row');
+            allPaymentRows.forEach(row => row.style.display = 'none');
+            if (!isAlreadyOpen) {
+              paymentRows.forEach(row => row.style.display = 'table-row');
+            }
+          };
+          tableBody.appendChild(detailRow);
+
+          if (loan.payments && loan.payments.length > 0) {
+            loan.payments.slice().reverse().forEach((payment, index) => {
+              const paymentRow = document.createElement('tr');
+              paymentRow.classList.add(`loan-${safeKey}`, `payment-${loan._index}`);
+              paymentRow.style.display = 'none';
+              paymentRow.innerHTML = `
+                <td colspan="4" style="text-align:left; padding-left: 30px; font-size: 13px; color: #444;">
+                  <strong>Payment ${loan.payments.length - index}.</strong> ₹${payment.amount} on ${payment.date} Paid
+                </td>`;
+              tableBody.appendChild(paymentRow);
+            });
+          }
+        });
+      });
+    }
+
+    function payLoan(index) {
+      const allPaymentRows = document.querySelectorAll('[class*="payment-"]');
+      allPaymentRows.forEach(row => row.style.display = 'none');
+      if (currentPayFormRow) currentPayFormRow.remove();
+
+      const loans = JSON.parse(localStorage.getItem('loans')) || [];
+      const loan = loans[index];
+      currentPayIndex = index;
+
+      const tableBody = document.querySelector('#loanTable tbody');
+      const allRows = Array.from(tableBody.querySelectorAll('tr'));
+      const targetRow = allRows.find(row =>
+        row.innerText.includes(loan.name) &&
+        row.innerText.includes(loan.phone) &&
+        row.innerText.includes(`₹${loan.amount}`) &&
+        row.innerText.includes(`${loan.date}`)
+      );
+
+      const formRow = document.createElement('tr');
+      const formCell = document.createElement('td');
+      formCell.colSpan = 4;
+      formCell.innerHTML = `
+        <div class="form-container" style="display:block;">
+          <h3>Pay Loan</h3>
+          <input type="number" id="payAmount" placeholder="Enter Paying Amount" required />
+          <input type="text" id="payDate" readonly value="${new Date().toLocaleDateString()}" />
+          <button class="btn pay-btn" onclick="submitPayment()">Confirm Payment</button>
+        </div>`;
+      formRow.appendChild(formCell);
+      targetRow.parentNode.insertBefore(formRow, targetRow.nextSibling);
+      currentPayFormRow = formRow;
+    }
+
+    function submitPayment() {
+      const amountInput = Number(document.getElementById('payAmount').value);
+      if (isNaN(amountInput) || amountInput <= 0) {
+        alert('Please enter a valid amount.');
+        return;
+      }
+
+      const loans = JSON.parse(localStorage.getItem('loans')) || [];
+      const loan = loans[currentPayIndex];
+      const openUserKey = `${loan.name}___${loan.phone}`.replace(/\s+/g, '-');
+
+      loan.paidAmount = (loan.paidAmount || 0) + amountInput;
+      loan.amount -= amountInput;
+      loan.isPaid = loan.amount <= 0;
+
+      if (!loan.payments) loan.payments = [];
+      loan.payments.push({
+        amount: amountInput,
+        date: new Date().toLocaleDateString()
+      });
+
+      loans[currentPayIndex] = loan;
+      localStorage.setItem('loans', JSON.stringify(loans));
+
+      alert('Payment recorded!');
+      if (currentPayFormRow) currentPayFormRow.remove();
+      currentPayFormRow = null;
+      currentPayIndex = null;
+
+      loadLoanTable(openUserKey);
+    }
+
+    function deleteLoan(index) {
+      if (confirm('Are you sure you want to delete this loan?')) {
+        const loans = JSON.parse(localStorage.getItem('loans')) || [];
+        loans.splice(index, 1);
+        localStorage.setItem('loans', JSON.stringify(loans));
+        loadLoanTable();
+      }
+    }
+
+    function editLoan(index) {
+      const loans = JSON.parse(localStorage.getItem('loans')) || [];
+      const loan = loans[index];
+      document.getElementById('userName').value = loan.name;
+      document.getElementById('phoneNumber').value = loan.phone;
+      document.getElementById('totalAmount').value = loan.amount;
+      document.getElementById('LoanDate').value = loan.date; // <-- changed
+      document.getElementById('loanForm').style.display = 'block';
+      loans.splice(index, 1);
+      localStorage.setItem('loans', JSON.stringify(loans));
+    }
+
+    window.onload = loadLoanTable;
+  </script>
+</body>
+</html>
